@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Local AI Document Assistant</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --bg:#fff; --fg:#1a1a1a; --card:#f4f4f6; --accent:#4f46e5; --muted:#666; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#16161a; --fg:#eee; --card:#23232a; --accent:#818cf8; --muted:#999; }
+  }
+  body { font-family: system-ui, sans-serif; background:var(--bg); color:var(--fg);
+         max-width:760px; margin:2rem auto; padding:0 1rem; }
+  .card { background:var(--card); border-radius:10px; padding:1rem; margin:1rem 0; }
+  button { background:var(--accent); color:#fff; border:0; border-radius:6px;
+           padding:.5rem 1rem; cursor:pointer; }
+  input[type=text] { width:70%; padding:.5rem; border-radius:6px; border:1px solid #888;
+                     background:var(--bg); color:var(--fg); }
+  .src { font-size:.85rem; color:var(--muted); margin-top:.5rem; }
+  .q { font-weight:600; } #status { color:var(--muted); font-size:.9rem; }
+</style>
+</head>
+<body>
+<h1>Local AI Document Assistant</h1>
+<p>Everything runs on your machine. Currently indexed chunks: <b id="count">{{ indexed }}</b></p>
+
+<div class="card">
+  <input type="file" id="files" multiple accept=".pdf,.txt,.md">
+  <button onclick="upload()">Upload &amp; index</button>
+  <div id="status"></div>
+</div>
+
+<div class="card">
+  <input type="text" id="question" placeholder="Ask about your documents..."
+         onkeydown="if(event.key==='Enter')ask()">
+  <button onclick="ask()">Ask</button>
+</div>
+<div id="chat"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+async function upload() {
+  const fd = new FormData();
+  for (const f of $('files').files) fd.append('files', f);
+  $('status').textContent = 'Indexing... (first run can take a minute)';
+  const r = await fetch('/upload', {method:'POST', body: fd});
+  const d = await r.json();
+  if (d.error) { $('status').textContent = 'Error: ' + d.error; return; }
+  $('count').textContent = d.chunks;
+  $('status').textContent = 'Done.';
+}
+
+async function ask() {
+  const question = $('question').value.trim();
+  if (!question) return;
+  $('question').value = '';
+  const box = document.createElement('div');
+  box.className = 'card';
+  box.innerHTML = `<div class="q">${esc(question)}</div><div class="a">Thinking...</div>`;
+  $('chat').prepend(box);
+  const r = await fetch('/ask', {method:'POST', headers:{'Content-Type':'application/json'},
+                                 body: JSON.stringify({question})});
+  const d = await r.json();
+  if (d.error) { box.querySelector('.a').textContent = 'Error: ' + d.error; return; }
+  box.querySelector('.a').innerHTML = esc(d.answer).replace(/\n/g, '<br>');
+  const src = d.sources.map((s,i) =>
+    `<div class="src"><b>[${i+1}]</b> ${esc(s.source)}${s.page ? ', p.'+s.page : ''}
+     (score ${s.score.toFixed(2)}) — ${esc(s.text.slice(0,160))}…</div>`).join('');
+  box.insertAdjacentHTML('beforeend', src);
+}
+</script>
+</body>
+</html>

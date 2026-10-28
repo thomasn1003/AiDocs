@@ -1,0 +1,4 @@
+Retrieval-augmented generation (RAG) combines a retrieval step with a language model.
+Documents are split into chunks, each chunk is turned into an embedding vector, and at
+question time the most semantically similar chunks are retrieved and given to the model
+as context. This grounds answers in the source material and reduces hallucination.
